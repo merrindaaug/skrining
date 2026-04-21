@@ -89,7 +89,3 @@ if submit_btn:
             # Opsi unduh manual jika cloud gagal
             st.download_button("Unduh Data Anda (CSV)", pd.DataFrame([row_data]).to_csv(index=False).encode('utf-8'), "hasil_backup.csv")
 
-# Save the code to a file
-file_path_final = '/mnt/data/ai_mental_health_final.py'
-with open(file_path_final, 'w') as f:
-    f.write(app_code_final)
