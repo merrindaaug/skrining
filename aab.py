@@ -1,6 +1,3 @@
-import os
-
-# Define the production-ready code for the mental health AI
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -17,6 +14,9 @@ with st.sidebar:
     st.header("Informasi Responden")
     res_id = st.text_input("ID Responden / Nama Inisial", placeholder="Contoh: R001")
     consent = st.checkbox("Saya bersedia mengikuti skrining ini.")
+    
+    st.divider()
+    st.info("SRQ-20 dikembangkan oleh WHO untuk skrining gangguan jiwa di pelayanan kesehatan primer.")
 
 # 3. List Pertanyaan (SRQ-20)
 questions = [
@@ -34,7 +34,7 @@ questions = [
 
 # 4. Form Kuesioner
 with st.form("srq_form"):
-    st.write("Jawablah pertanyaan berikut sesuai kondisi Anda dalam 30 hari terakhir.")
+    st.write("Jawablah pertanyaan berikut sesuai kondisi Anda dalam **30 hari terakhir**.")
     user_responses = []
     
     for i, q in enumerate(questions):
@@ -62,14 +62,25 @@ if submit_btn:
         for i, val in enumerate(user_responses):
             row_data[f"Q{i+1}"] = val
         
+        new_entry = pd.DataFrame([row_data])
+        
         try:
-            # Koneksi ke GSheets (Pastikan Secrets sudah diatur di Streamlit Cloud)
+            # Koneksi ke GSheets
             conn = st.connection("gsheets", type=GSheetsConnection)
             
-            # Baca data lama, gabungkan dengan yang baru, lalu update
-            data_lama = conn.read()
-            updated_df = pd.concat([data_lama, pd.DataFrame([row_data])], ignore_index=True)
-            conn.update(data=updated_df)
+            # Membaca data yang sudah ada (gunakan nama worksheet yang sesuai, misal: Sheet1)
+            # ttl=0 memastikan data selalu fresh
+            try:
+                existing_data = conn.read(worksheet="Sheet1", ttl=0)
+                existing_data = existing_data.dropna(how="all")
+            except:
+                existing_data = pd.DataFrame() # Jika sheet masih kosong
+            
+            # Gabungkan data
+            updated_df = pd.concat([existing_data, new_entry], ignore_index=True)
+            
+            # Update ke Google Sheets
+            conn.update(worksheet="Sheet1", data=updated_df)
             
             st.success("✅ Data berhasil tersimpan di database riset.")
             
@@ -82,10 +93,14 @@ if submit_btn:
                 st.success("Kondisi Anda dalam batas normal. Tetap jaga kesehatan mental!")
             
             if user_responses[16] == 1:
-                st.warning("Peringatan: Harap segera hubungi layanan kesehatan jiwa terdekat karena jawaban Anda pada poin pikiran mengakhiri hidup.")
+                st.warning("⚠️ **Peringatan Penting:** Jawaban Anda menunjukkan adanya pikiran untuk menyakiti diri sendiri. Harap segera hubungi layanan kesehatan jiwa atau orang terpercaya.")
                 
         except Exception as e:
             st.error(f"Gagal menyambung ke database. Pastikan konfigurasi Secrets sudah benar.")
-            # Opsi unduh manual jika cloud gagal
-            st.download_button("Unduh Data Anda (CSV)", pd.DataFrame([row_data]).to_csv(index=False).encode('utf-8'), "hasil_backup.csv")
-
+            # Tombol cadangan jika koneksi internet/GSheets gagal
+            st.download_button(
+                label="Unduh Data Anda (CSV)", 
+                data=new_entry.to_csv(index=False).encode('utf-8'), 
+                file_name=f"hasil_{res_id}.csv",
+                mime="text/csv"
+            )
